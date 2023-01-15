@@ -10,7 +10,7 @@ GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_ALWAYS
 
 class Gif:
     # "Exists" means if the file exists, or it needs being made
-    def __init__(self, path):
+    def __init__(self, path, size=None):  # Size is resolution
         # The path might be to HTTP URL or just to a local directory on a computer
         self.path = path
 
@@ -18,8 +18,9 @@ class Gif:
         if self.path.split(":")[0] == "https" or self.path.split(":")[0] == "http":
             self.image = Image.open(urlopen(self.path))
         elif not os.path.exists(self.path):
-            self.image = Image.new("RGBA", (126, 90))
-            self.image.seek(0)
+            if size is None:
+                raise TypeError("Size\" parameter missing.")
+            self.image = Image.new("RGBA", size)
         else:
             self.image = Image.open(self.path)
 
@@ -41,9 +42,12 @@ class Gif:
     def getframes(self) -> int:
         return self.image.n_frames
 
+    def getresolution(self) -> tuple:
+        return self.image.width, self.image.height
+
 
 #  Returning a size of a frame in bytes
-def getsizeofimage(image) -> int:
+def getsizeofframe(image) -> int:
     image.save("oneframe__.gif")
 
     filesize = os.path.getsize("oneframe__.gif")
@@ -54,26 +58,31 @@ def getsizeofimage(image) -> int:
     return filesize
 
 
-def take_frames_from(imagepath, buffer, desiredsize):
+def take_frames_from(imagepath, buffer, desiredsize) -> tuple:
     source = Gif(imagepath)
     # Calculating how many frames we need the output file to be "desiredsize" bytes
-    repeats = int(desiredsize / (getsizeofimage(source.getcurrentframe()) - 500))
+    width, height = source.getresolution()
+    correction = (width + height) * 500 / 216  # Correcting output size (not 100% for now)
+
+    repeats = int(desiredsize / (getsizeofframe(source.getcurrentframe()) - correction))
 
     for time in range(repeats):
         buffer.append(source.getcurrentframe())
         source.movetonextframe()
 
+    return width, height
 
-def put_frame_to(imagepath, buffer):
+
+def put_frame_to(imagepath, buffer, size):
     # Checking if the path is a URL or a local path of the computer
     # Making a large gif in the folder of the script if the path is url or
     # in the folder where the smaller gif is
     if imagepath.split(":")[0] == "https" or imagepath.split(":")[0] == "http":
-        destination = Gif("larger.gif")
+        destination = Gif("larger.gif", size)
     else:
         if os.path.exists(str(imagepath.split(".")[0]) + "_large.gif"):
             os.remove(str(imagepath.split(".")[0]) + "_large.gif")
-        destination = Gif(imagepath.split(".")[0] + "_large.gif")
+        destination = Gif(imagepath.split(".")[0] + "_large.gif", size)
 
     destination.close(buffer)
 
@@ -86,14 +95,14 @@ if __name__ == "__main__":
     while True:
         try:
             # List to save all frames from the gif
-            frames = FrameVector(int(input("Enter a number of length of a buffer of frames: ")))
+            frames = FrameVector(int(input("Enter a number of length of a buffer of frames (1000 is default): ")))
             break
         except ValueError:
             print("Error! You've entered a wrong number.")
 
     while True:
         while True:
-            filepath = input("\nEnter an URL/Full local file path to a gif (1000 is default): ")
+            filepath = input("\nEnter an URL/Full local file path to a gif: ")
             if filepath.split(":")[0] != "https" and filepath.split(":") != "http" and os.path.exists(filepath):
                 break
             print("Error: You've entered a wrong path, the file does not exist.")
@@ -112,5 +121,5 @@ if __name__ == "__main__":
         if sizeoffile != "back":
             break
 
-    take_frames_from(filepath, frames, sizeoffile * 1000)  # Size * 1000 turn the size into bytes
-    put_frame_to(filepath, frames)
+    resolution = take_frames_from(filepath, frames, sizeoffile * 1000)  # Size * 1000 turn the size into bytes
+    put_frame_to(filepath, frames, resolution)
